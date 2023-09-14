@@ -178,7 +178,6 @@ static int setup_candidates_for_first_keypress(int32_t position, int64_t timesta
         // LOG_DBG("combo timeout %d %d %d", position, i, candidates[i].timeout_at);
     }
     update_possible_positions_for_candidates(candidate_set);
-    k_sem_give(&candidates_sem);
     return number_of_combo_candidates;
 }
 
