@@ -74,8 +74,8 @@ struct active_combo active_combos[CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS] = {NULL};
 int active_combo_count = 0;
 int32_t candidates_possible_possitions[CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS][ZMK_KEYMAP_LEN] = {};
 
-struct k_work_delayable timeout_task;
-int64_t timeout_task_timeout_at;
+struct k_work_delayable timeout_task[CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS];
+int64_t timeout_task_timeout_at[CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS];
 
 // Store the combo key pointer in the combos array, one pointer for each key position
 // The combos are sorted shortest-first, then by virtual-key-position.
@@ -216,18 +216,17 @@ static int filter_candidates(int32_t position, int candidate_set) {
     return matches;
 }
 
-static int64_t first_candidate_timeout() {
+static int64_t first_candidate_timeout(int candidate_set) {
     int64_t first_timeout = LONG_MAX;
-    for (int i = 0; i < CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS; i++) {
-        for (int j = 0; j < CONFIG_ZMK_COMBO_MAX_COMBOS_PER_KEY; j++) {
-            if (candidates[i][j].combo == NULL) {
-                break;
-            }
-            if (candidates[i][j].timeout_at < first_timeout) {
-                first_timeout = candidates[i][j].timeout_at;
-            }
+    for (int j = 0; j < CONFIG_ZMK_COMBO_MAX_COMBOS_PER_KEY; j++) {
+        if (candidates[candidate_set][j].combo == NULL) {
+            break;
+        }
+        if (candidates[candidate_set][j].timeout_at < first_timeout) {
+            first_timeout = candidates[candidate_set][j].timeout_at;
         }
     }
+    LOG_DBG("combo: timeout %lld", first_timeout);
     return first_timeout;
 }
 
@@ -409,6 +408,7 @@ static bool release_combo_key(int32_t position, int64_t timestamp) {
             if ((active_combo->combo->slow_release && all_keys_released) ||
                 (!active_combo->combo->slow_release && all_keys_pressed)) {
                 release_combo_behavior(active_combo->combo, timestamp);
+                LOG_DBG("combo: released combo at %lld", timestamp);
             }
             if (all_keys_released) {
                 deactivate_combo(combo_idx);
@@ -420,7 +420,7 @@ static bool release_combo_key(int32_t position, int64_t timestamp) {
 }
 
 static int cleanup(int candidate_set) {
-    k_work_cancel_delayable(&timeout_task);
+    k_work_cancel_delayable(&timeout_task[candidate_set]);
     clear_candidates(candidate_set);
     if (fully_pressed_combo[candidate_set] != NULL) {
         activate_combo(fully_pressed_combo[candidate_set], candidate_set);
@@ -429,18 +429,23 @@ static int cleanup(int candidate_set) {
     return release_pressed_keys(candidate_set);
 }
 
-static void update_timeout_task() {
-    int64_t first_timeout = first_candidate_timeout();
-    if (timeout_task_timeout_at == first_timeout) {
+static void update_timeout_task(int candidate_set) {
+    int64_t first_timeout = first_candidate_timeout(candidate_set);
+    if (timeout_task_timeout_at[candidate_set] == first_timeout) {
+        LOG_DBG("combo: timeout skipped %lld", k_uptime_get());
         return;
     }
-    if (first_timeout == LLONG_MAX) {
-        timeout_task_timeout_at = 0;
-        k_work_cancel_delayable(&timeout_task);
+    if (first_timeout == LONG_MAX) {
+        timeout_task_timeout_at[candidate_set] = 0;
+        k_work_cancel_delayable(&timeout_task[candidate_set]);
         return;
     }
-    if (k_work_schedule(&timeout_task, K_MSEC(first_timeout - k_uptime_get())) >= 0) {
-        timeout_task_timeout_at = first_timeout;
+    if (k_work_schedule(&timeout_task[candidate_set], K_MSEC(first_timeout - k_uptime_get())) >=
+        0) {
+        timeout_task_timeout_at[candidate_set] = first_timeout;
+        LOG_DBG("combo: timeout re-scheduled");
+    } else {
+        LOG_DBG("combo: timeout was not re-scheduled %lld", k_uptime_get());
     }
 }
 
@@ -463,7 +468,7 @@ static int position_state_down(const zmk_event_t *ev, struct zmk_position_state_
         filter_timed_out_candidates(data->timestamp, candidate_set);
         num_candidates = filter_candidates(data->position, candidate_set);
     }
-    update_timeout_task();
+    update_timeout_task(candidate_set);
 
     struct combo_cfg *candidate_combo = candidates[candidate_set][0].combo;
     LOG_DBG("combo: capturing position event %d", data->position);
@@ -517,19 +522,22 @@ static void combo_timeout_handler(struct k_work *item) {
     LOG_DBG("combo: timeout handler start");
     if (k_sem_take(&candidates_sem, K_FOREVER) < 0) {
         LOG_DBG("combo: could not acquire semafore 3");
-        return 0;
-    }
-    if (timeout_task_timeout_at == 0 || k_uptime_get() < timeout_task_timeout_at) {
-        // timer was cancelled or rescheduled.
-        k_sem_give(&candidates_sem);
         return;
     }
     for (int i = 0; i < CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS; i++) {
-        if (filter_timed_out_candidates(timeout_task_timeout_at, i) < 2) {
-            cleanup(i);
+        if ((k_work_delayable_busy_get(&timeout_task[i]) & 1) == 1) {
+            LOG_DBG("combo: timeout handler for set %d", i);
+            if (timeout_task_timeout_at[i] == 0 || k_uptime_get() < timeout_task_timeout_at[i]) {
+                // timer was cancelled or rescheduled.
+                break;
+            }
+            if (filter_timed_out_candidates(timeout_task_timeout_at[i], i) < 2) {
+                cleanup(i);
+            }
+            update_timeout_task(i);
+            break;
         }
     }
-    update_timeout_task();
     k_sem_give(&candidates_sem);
     LOG_DBG("combo: timeout handler end");
 }
@@ -567,7 +575,9 @@ ZMK_SUBSCRIPTION(combo, zmk_position_state_changed);
 DT_INST_FOREACH_CHILD(0, COMBO_INST)
 
 static int combo_init() {
-    k_work_init_delayable(&timeout_task, combo_timeout_handler);
+    for (int i = 0; i < CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS; i++) {
+        k_work_init_delayable(&timeout_task[i], combo_timeout_handler);
+    }
     DT_INST_FOREACH_CHILD(0, INITIALIZE_COMBO);
     return 0;
 }
