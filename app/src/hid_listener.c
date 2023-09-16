@@ -20,7 +20,7 @@ static int hid_listener_keycode_pressed(const struct zmk_keycode_state_changed *
     int err, explicit_mods_changed, implicit_mods_changed;
 
     if (zmk_hid_is_pressed(ZMK_HID_USAGE(ev->usage_page, ev->keycode)) && ev->usage_page == 0x07 &&
-        ev->keycode < 0x0E) {
+        ev->keycode < 0xE0) {
         LOG_DBG("unregistering usage_page 0x%02X keycode 0x%02X since it was already pressed",
                 ev->usage_page, ev->keycode);
         err = zmk_hid_release(ZMK_HID_USAGE(ev->usage_page, ev->keycode));
