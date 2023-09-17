@@ -72,8 +72,9 @@ struct combo_cfg *combo_lookup[ZMK_KEYMAP_LEN][CONFIG_ZMK_COMBO_MAX_COMBOS_PER_K
 // this array is always contiguous from 0.
 struct active_combo active_combos[CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS] = {NULL};
 int active_combo_count = 0;
-int position_to_candidate_set[ZMK_KEYMAP_LEN] = {-1};
-int pressed_key_to_candidate_set[ZMK_KEYMAP_LEN] = {-1};
+int position_to_candidate_set[ZMK_KEYMAP_LEN] = {[0 ... ZMK_KEYMAP_LEN - 1] = -1};
+int pressed_key_to_candidate_set[ZMK_KEYMAP_LEN] = {[0 ... ZMK_KEYMAP_LEN - 1] = -1};
+int last_used_candidate_set = -1;
 
 struct k_work_delayable timeout_task[CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS];
 int64_t timeout_task_timeout_at[CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS];
@@ -149,21 +150,32 @@ static void update_possible_positions_for_candidates(int candidate_set) {
 static int select_candidate_set(int32_t position) {
     int candidate_set = position_to_candidate_set[position];
     if (candidate_set == -1) {
-        int used_sets[CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS] = {0};
-        for (int i = 0; i < ZMK_KEYMAP_LEN; i++) {
-            if (position_to_candidate_set[i] != -1) {
-                used_sets[position_to_candidate_set[i]] = 1;
-            }
+        struct combo_cfg *combo_at_j = combo_lookup[position][0];
+        // check if this position is part of a combo, if not, add it to the last used candidate set
+        if (combo_at_j == NULL) {
+            candidate_set = last_used_candidate_set;
         }
-        for (int i = 0; i < CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS; i++) {
-            if (used_sets[i] == 0) {
-                candidate_set = i;
-                break;
+        // else, we want to find an empty candidate set
+        else {
+            int used_sets[CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS] = {0};
+            for (int i = 0; i < ZMK_KEYMAP_LEN; i++) {
+                if (position_to_candidate_set[i] != -1) {
+                    used_sets[position_to_candidate_set[i]] = 1;
+                }
+            }
+            for (int i = 0; i < CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS; i++) {
+                if (used_sets[i] == 0) {
+                    candidate_set = i;
+                    break;
+                }
             }
         }
     }
     if (candidate_set == -1) {
         LOG_ERR("combo: could not find an empty candidate set!");
+    } else {
+        // LOG_DBG("combo: selected candidate set %d.", candidate_set);
+        last_used_candidate_set = candidate_set;
     }
 
     return candidate_set;

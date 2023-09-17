@@ -19,8 +19,9 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 static int hid_listener_keycode_pressed(const struct zmk_keycode_state_changed *ev) {
     int err, explicit_mods_changed, implicit_mods_changed;
 
-    if (zmk_hid_is_pressed(ZMK_HID_USAGE(ev->usage_page, ev->keycode)) && ev->usage_page == 0x07 &&
-        ev->keycode < 0xE0) {
+    if (!(ev->usage_page == HID_USAGE_KEY && ev->keycode >= HID_USAGE_KEY_KEYBOARD_LEFTCONTROL &&
+          ev->keycode <= HID_USAGE_KEY_KEYBOARD_RIGHT_GUI) &&
+        zmk_hid_is_pressed(ZMK_HID_USAGE(ev->usage_page, ev->keycode))) {
         LOG_DBG("unregistering usage_page 0x%02X keycode 0x%02X since it was already pressed",
                 ev->usage_page, ev->keycode);
         err = zmk_hid_release(ZMK_HID_USAGE(ev->usage_page, ev->keycode));
