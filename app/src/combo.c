@@ -74,7 +74,7 @@ struct active_combo active_combos[CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS] = {NULL};
 int active_combo_count = 0;
 int position_to_candidate_set[ZMK_KEYMAP_LEN] = {[0 ... ZMK_KEYMAP_LEN - 1] = -1};
 int pressed_key_to_candidate_set[ZMK_KEYMAP_LEN] = {[0 ... ZMK_KEYMAP_LEN - 1] = -1};
-int last_used_candidate_set = -1;
+int last_used_candidate_set = 0;
 
 struct k_work_delayable timeout_task[CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS];
 int64_t timeout_task_timeout_at[CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS];
