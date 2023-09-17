@@ -25,7 +25,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
 
-static K_SEM_DEFINE(candidates_sem, 1, 1);
+// static K_SEM_DEFINE(candidates_sem, 1, 1);
 
 struct combo_cfg {
     int32_t key_positions[CONFIG_ZMK_COMBO_MAX_KEYS_PER_COMBO];
@@ -58,10 +58,10 @@ struct combo_candidate {
     int64_t timeout_at;
 };
 
-// set of keys pressed
+// set of keys pressed split in sets for each potential combo
 const zmk_event_t *pressed_keys[CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS]
                                [CONFIG_ZMK_COMBO_MAX_KEYS_PER_COMBO] = {NULL};
-// the set of candidate combos based on the currently pressed_keys
+// the set of candidate combos based on the currently pressed_keys split in sets for each
 struct combo_candidate candidates[CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS]
                                  [CONFIG_ZMK_COMBO_MAX_COMBOS_PER_KEY];
 // the last candidate that was completely pressed
@@ -462,10 +462,10 @@ static void update_timeout_task(int candidate_set) {
 
 static int position_state_down(const zmk_event_t *ev, struct zmk_position_state_changed *data) {
     LOG_DBG("combo: key down start");
-    if (k_sem_take(&candidates_sem, K_FOREVER) < 0) {
-        LOG_DBG("combo: could not acquire semafore 1");
-        return 0;
-    }
+    // if (k_sem_take(&candidates_sem, K_FOREVER) < 0) {
+    //     LOG_DBG("combo: could not acquire semafore 1");
+    //     return 0;
+    // }
     int num_candidates;
     int candidate_set = select_candidate_set(data->position);
     pressed_key_to_candidate_set[data->position] = candidate_set;
@@ -473,7 +473,7 @@ static int position_state_down(const zmk_event_t *ev, struct zmk_position_state_
         num_candidates =
             setup_candidates_for_first_keypress(data->position, data->timestamp, candidate_set);
         if (num_candidates == 0) {
-            k_sem_give(&candidates_sem);
+            // k_sem_give(&candidates_sem);
             return 0;
         }
     } else {
@@ -502,17 +502,17 @@ static int position_state_down(const zmk_event_t *ev, struct zmk_position_state_
         break;
     }
 
-    k_sem_give(&candidates_sem);
+    // k_sem_give(&candidates_sem);
     LOG_DBG("combo: key down end");
     return ret;
 }
 
 static int position_state_up(const zmk_event_t *ev, struct zmk_position_state_changed *data) {
     LOG_DBG("combo: key up start");
-    if (k_sem_take(&candidates_sem, K_FOREVER) < 0) {
-        LOG_DBG("combo: could not acquire semafore 2");
-        return 0;
-    }
+    // if (k_sem_take(&candidates_sem, K_FOREVER) < 0) {
+    //     LOG_DBG("combo: could not acquire semafore 2");
+    //     return 0;
+    // }
 
     int ret = 0;
     int candidate_set = pressed_key_to_candidate_set[data->position];
@@ -531,17 +531,17 @@ static int position_state_up(const zmk_event_t *ev, struct zmk_position_state_ch
             ret = ZMK_EV_EVENT_CAPTURED;
         }
     }
-    k_sem_give(&candidates_sem);
+    // k_sem_give(&candidates_sem);
     LOG_DBG("combo: key up end");
     return ret;
 }
 
 static void combo_timeout_handler(struct k_work *item) {
     LOG_DBG("combo: timeout handler start");
-    if (k_sem_take(&candidates_sem, K_FOREVER) < 0) {
-        LOG_DBG("combo: could not acquire semafore 3");
-        return;
-    }
+    // if (k_sem_take(&candidates_sem, K_FOREVER) < 0) {
+    //     LOG_DBG("combo: could not acquire semafore 3");
+    //     return;
+    // }
     for (int i = 0; i < CONFIG_ZMK_COMBO_MAX_PRESSED_COMBOS; i++) {
         if ((k_work_delayable_busy_get(&timeout_task[i]) & 1) == 1) {
             LOG_DBG("combo: timeout handler for set %d", i);
@@ -556,7 +556,7 @@ static void combo_timeout_handler(struct k_work *item) {
             break;
         }
     }
-    k_sem_give(&candidates_sem);
+    // k_sem_give(&candidates_sem);
     LOG_DBG("combo: timeout handler end");
 }
 
