@@ -17,7 +17,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/endpoints.h>
 
 static int hid_listener_keycode_pressed(const struct zmk_keycode_state_changed *ev) {
-    int err, explicit_mods_changed, implicit_mods_changed
+    int err, explicit_mods_changed, implicit_mods_changed;
 
     if (!is_mod(ev->usage_page, ev->keycode) &&
         zmk_hid_is_pressed(ZMK_HID_USAGE(ev->usage_page, ev->keycode))) {
