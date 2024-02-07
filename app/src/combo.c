@@ -269,35 +269,23 @@ static inline bool candidate_is_completely_pressed(struct combo_cfg *candidate, 
 static int cleanup(int candidate_set);
 
 static int filter_timed_out_candidates(int64_t timestamp, int candidate_set) {
-    int remaining_candidates = 0;
+    int num_candidates = 0;
     for (int i = 0; i < CONFIG_ZMK_COMBO_MAX_COMBOS_PER_KEY; i++) {
         struct combo_candidate *candidate = &candidates[candidate_set][i];
         if (candidate->combo == NULL) {
             break;
         }
         if (candidate->timeout_at > timestamp) {
-            bool need_to_bubble_up = remaining_candidates != i;
-            if (need_to_bubble_up) {
-                // bubble up => reorder candidates so they're contiguous
-                candidates[candidate_set][remaining_candidates].combo = candidate->combo;
-                candidates[candidate_set][remaining_candidates].timeout_at = candidate->timeout_at;
-                // clear the previous location
-                candidates[candidate_set][i].combo = NULL;
-                candidates[candidate_set][i].timeout_at = 0;
-            }
-
-            remaining_candidates++;
+            // reorder candidates so they're contiguous
+            candidates[candidate_set][num_candidates].combo = candidate->combo;
+            candidates[candidate_set][num_candidates].timeout_at = candidate->timeout_at;
+            num_candidates++;
         } else {
             candidate->combo = NULL;
         }
     }
     update_possible_positions_for_candidates(candidate_set);
-    
-    LOG_DBG(
-        "after filtering out timed out combo candidates: remaining_candidates=%d timestamp=%lld",
-        remaining_candidates, timestamp);
-
-    return remaining_candidates;
+    return num_candidates;
 }
 
 static void clear_candidates(int candidate_set) {
@@ -573,7 +561,7 @@ static void combo_timeout_handler(struct k_work *item) {
                 // timer was cancelled or rescheduled.
                 break;
             }
-            if (filter_timed_out_candidates(timeout_task_timeout_at[i], i) == 0) {
+            if (filter_timed_out_candidates(timeout_task_timeout_at[i], i) < 2) {
                 cleanup(i);
             }
             update_timeout_task(i);
