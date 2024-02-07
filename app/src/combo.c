@@ -279,11 +279,11 @@ static int filter_timed_out_candidates(int64_t timestamp, int candidate_set) {
             bool need_to_bubble_up = remaining_candidates != i;
             if (need_to_bubble_up) {
                 // bubble up => reorder candidates so they're contiguous
-                candidates[remaining_candidates].combo = candidate->combo;
-                candidates[remaining_candidates].timeout_at = candidate->timeout_at;
+                candidates[candidate_set][remaining_candidates].combo = candidate->combo;
+                candidates[candidate_set][remaining_candidates].timeout_at = candidate->timeout_at;
                 // clear the previous location
-                candidates[i].combo = NULL;
-                candidates[i].timeout_at = 0;
+                candidates[candidate_set][i].combo = NULL;
+                candidates[candidate_set][i].timeout_at = 0;
             }
 
             remaining_candidates++;
